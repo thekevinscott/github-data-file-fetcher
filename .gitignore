@@ -1,0 +1,9 @@
+.cache/
+results/
+__pycache__/
+*.pyc
+notebooks/__marimo__/
+notebooks/*.ipynb
+.env
+notes
+.claude/settings.local.json
