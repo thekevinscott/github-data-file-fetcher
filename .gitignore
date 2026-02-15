@@ -7,3 +7,4 @@ notebooks/*.ipynb
 .env
 notes
 .claude/settings.local.json
+site/
