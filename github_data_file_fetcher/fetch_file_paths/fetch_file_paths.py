@@ -38,7 +38,6 @@ def fetch_file_paths(
     if collected > 0:
         print(f"Resuming: {collected:,} already collected", flush=True)
 
-    # Resume from last scan position
     lo = 0
     if progress and progress["last_lo"] > 0 and not skip_cache:
         lo = progress["last_lo"]
@@ -47,14 +46,14 @@ def fetch_file_paths(
     consecutive_empty = 0
     MAX_CONSECUTIVE_EMPTY = 10
 
-    while lo < MAX_SIZE:
-        hi = min(lo + chunk, MAX_SIZE)
+    while lo <= MAX_SIZE:
+        # chunk = number of distinct byte sizes in the range (>= 1)
+        hi = min(lo + chunk - 1, MAX_SIZE)
         count = client.search_code(f"{query} size:{lo}..{hi}", per_page=1, page=1).get(
             "total_count", 0
         )
 
         if count == 0:
-            # Empty region - widen and advance
             print(f"  size:{lo}..{hi} = 0 (skipping)", flush=True)
             consecutive_empty += 1
             if consecutive_empty >= MAX_CONSECUTIVE_EMPTY:
@@ -63,40 +62,37 @@ def fetch_file_paths(
             lo = hi + 1
             chunk = min(chunk * 2, MAX_SIZE)
 
-        elif count < GITHUB_SEARCH_RESULT_LIMIT:
-            # Collectible - grab it, widen, advance
-            consecutive_empty = 0
-            print(f"  size:{lo}..{hi} = {count:,} (collecting)", flush=True)
-            full_query = f"{query} size:{lo}..{hi}"
-            files = fetch_files(full_query)
-
-            # Track every hit for analysis
-            hits = [
-                {"url": f["html_url"], "query": full_query, "size_min": lo, "size_max": hi}
-                for f in files
-            ]
-            insert_search_hits(db_path, hits)
-
-            if len(files) >= GITHUB_SEARCH_RESULT_LIMIT:
-                # GitHub lied about count - narrow and retry
-                print(f"    ^ hit ceiling ({len(files)}), narrowing", flush=True)
-                chunk = max(chunk // 2, 1)
-            else:
-                new_count = insert_files(db_path, files)
-                collected += new_count
-                print(f"    ^ stored {new_count} new ({collected:,} total)", flush=True)
-                lo = hi + 1
-                chunk = min(chunk * 2, MAX_SIZE)
-
-        else:
-            # Too dense - narrow, stay put
+        elif count >= GITHUB_SEARCH_RESULT_LIMIT:
             consecutive_empty = 0
             print(f"  size:{lo}..{hi} = {count:,} (narrowing)", flush=True)
             chunk = max(chunk // 2, 1)
 
-        # Save progress periodically
+        else:
+            consecutive_empty = 0
+            print(f"  size:{lo}..{hi} = {count:,} (collecting)", flush=True)
+            full_query = f"{query} size:{lo}..{hi}"
+            files = fetch_files(full_query)
+            insert_search_hits(db_path, [
+                {"url": f["html_url"], "query": full_query, "size_min": lo, "size_max": hi}
+                for f in files
+            ])
+
+            if len(files) >= GITHUB_SEARCH_RESULT_LIMIT and lo < hi:
+                # Actual results exceeded estimate — narrow further
+                print(f"    ^ hit ceiling ({len(files)}), narrowing", flush=True)
+                chunk = max(chunk // 2, 1)
+            else:
+                # Store and advance (includes exact-size ceiling: lo==hi)
+                new_count = insert_files(db_path, files)
+                collected += new_count
+                if len(files) >= GITHUB_SEARCH_RESULT_LIMIT:
+                    print(f"    ^ hit ceiling at exact size {lo}, stored {new_count} new ({collected:,} total)", flush=True)
+                else:
+                    print(f"    ^ stored {new_count} new ({collected:,} total)", flush=True)
+                lo = hi + 1
+                chunk = min(chunk * 2, MAX_SIZE)
+
         update_scan_progress(db_path, query, lo, MAX_SIZE, collected)
 
-    # Mark scan as completed
     update_scan_progress(db_path, query, lo, MAX_SIZE, collected, completed=True)
     print(f"\nDone. Collected {collected} / {total:,}", flush=True)
