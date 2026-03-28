@@ -4,13 +4,16 @@ import hashlib
 import json
 import threading
 import time
+from datetime import timedelta
 from pathlib import Path
 
+from cachetta import Cachetta, read_cache, write_cache
 from github import Auth, Github, GithubException, RateLimitExceededException
 
 from .settings import get_settings
 
 DEFAULT_CACHE_DIR = Path.home() / ".cache/github-data-file-fetcher"
+DEFAULT_DURATION = timedelta(days=30)
 
 # Rate limit backoff settings
 BACKOFF_FACTOR = 1.5
@@ -21,41 +24,52 @@ MAX_RETRIES = 30
 REQUESTS_PER_SECOND = 1.3
 
 
+def _cache_path(endpoint, params=None):
+    """Generate cache file path from endpoint and params."""
+    params = params or {}
+    raw = f"{endpoint}|{json.dumps(params, sort_keys=True)}"
+    key = hashlib.sha256(raw.encode()).hexdigest()[:16]
+    return DEFAULT_CACHE_DIR / f"{key}.json"
+
+
+_default_cache = Cachetta(path=_cache_path, duration=DEFAULT_DURATION)
+
+
 class Cache:
-    """Simple file-based cache for API responses."""
+    """Cachetta-backed file cache for API responses."""
 
     def __init__(self, cache_dir: Path, skip_cache: bool = False):
         self.cache_dir = cache_dir
         self.skip_cache = skip_cache
         self.hits = 0
+        if cache_dir != DEFAULT_CACHE_DIR:
+            def _custom_path(endpoint, params=None):
+                params = params or {}
+                raw = f"{endpoint}|{json.dumps(params, sort_keys=True)}"
+                key = hashlib.sha256(raw.encode()).hexdigest()[:16]
+                return cache_dir / f"{key}.json"
+            self._cache = Cachetta(path=_custom_path, duration=DEFAULT_DURATION, read=not skip_cache)
+        else:
+            if skip_cache:
+                self._cache = _default_cache.copy(read=False)
+            else:
+                self._cache = _default_cache
 
     def _key(self, endpoint: str, params: dict) -> str:
         """Generate cache key for an API call."""
-        key = f"{endpoint}|{json.dumps(params, sort_keys=True)}"
-        return hashlib.sha256(key.encode()).hexdigest()[:16]
+        raw = f"{endpoint}|{json.dumps(params, sort_keys=True)}"
+        return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
     def get(self, endpoint: str, params: dict) -> dict | None:
         """Get cached API response."""
-        if self.skip_cache:
-            return None
-        key = self._key(endpoint, params)
-        path = self.cache_dir / f"{key}.json"
-        if path.exists():
-            try:
-                with open(path) as f:
-                    data = json.load(f)
+        with read_cache(self._cache, endpoint, params) as data:
+            if data is not None:
                 self.hits += 1
-                return data
-            except (json.JSONDecodeError, OSError, UnicodeDecodeError):
-                return None
-        return None
+            return data
 
     def set(self, endpoint: str, params: dict, data: dict):
         """Cache an API response."""
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-        path = self.cache_dir / f"{self._key(endpoint, params)}.json"
-        with open(path, "w") as f:
-            json.dump(data, f)
+        write_cache(self._cache, data, endpoint, params)
 
 
 class GitHubClient:
