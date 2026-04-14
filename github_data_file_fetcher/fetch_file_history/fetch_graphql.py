@@ -7,7 +7,7 @@ from ..db import get_files_without_history, init_db, insert_file_history_batch
 from ..graphql import GraphQLClient
 from ..utils import parse_github_url
 
-DEFAULT_BATCH_SIZE = 20
+DEFAULT_BATCH_SIZE = 5
 
 
 def _progress(msg: str):

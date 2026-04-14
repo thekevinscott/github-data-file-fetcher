@@ -87,13 +87,15 @@ Fetches commit history for each file (first/last commit dates, authors, total co
 
 ```bash
 # GraphQL batch mode (recommended -- ~50x faster than REST)
-uv run github-fetch fetch-file-history --graphql
+# Use a small batch size -- history queries are heavy (up to 100 commits per file),
+# and large batches cause GitHub 502 errors. Start with 5, go lower if needed.
+uv run github-fetch fetch-file-history --graphql --batch-size 5
 
 # REST mode (slow -- one API call per file)
 uv run github-fetch fetch-file-history
 
 # Custom batch size and output
-uv run github-fetch fetch-file-history --graphql --batch-size 20 --db /path/to/db.db -o history.json
+uv run github-fetch fetch-file-history --graphql --batch-size 5 --db /path/to/db.db -o history.json
 ```
 
 **Output**: `results/file_history.json`

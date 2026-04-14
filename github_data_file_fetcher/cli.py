@@ -124,8 +124,8 @@ def main():
     history_parser.add_argument(
         "--batch-size",
         type=int,
-        default=20,
-        help="Files per GraphQL query (default: 20, requires --graphql)",
+        default=5,
+        help="Files per GraphQL query (default: 5, requires --graphql)",
     )
 
     # api subcommand
