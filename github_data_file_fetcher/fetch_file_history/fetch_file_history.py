@@ -35,8 +35,11 @@ def _wait_for_rate_limit(client, e):
         time.sleep(1)
 
 
-def fetch_file_history(db_path: Path | None = None) -> dict:
+def fetch_file_history(db_path: Path | None = None, *, retry_errors: bool = False) -> dict:
     """Fetch commit history for files that don't have it yet.
+
+    If retry_errors is True, cached error entries (e.g. prior 404s) are
+    ignored so those files get re-fetched.
 
     Returns dict with counts: fetched, errors.
     """
@@ -61,7 +64,7 @@ def fetch_file_history(db_path: Path | None = None) -> dict:
 
         # Check cache first
         cached = cache.get(_CACHE_ENDPOINT, cache_params)
-        if cached is not None:
+        if cached is not None and not (retry_errors and cached.get("error")):
             if cached.get("error"):
                 stats["errors"] += 1
             else:

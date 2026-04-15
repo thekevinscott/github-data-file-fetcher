@@ -97,6 +97,11 @@ def main():
         default=50,
         help="Repos per GraphQL query (default: 50, requires --graphql)",
     )
+    meta_parser.add_argument(
+        "--retry-errors",
+        action="store_true",
+        help="Retry cached errors (e.g. repos that previously 404'd)",
+    )
 
     # fetch-file-history subcommand
     history_parser = subparsers.add_parser(
@@ -126,6 +131,11 @@ def main():
         type=int,
         default=5,
         help="Files per GraphQL query (default: 5, requires --graphql)",
+    )
+    history_parser.add_argument(
+        "--retry-errors",
+        action="store_true",
+        help="Retry cached errors (e.g. files that previously 404'd)",
     )
 
     # api subcommand
@@ -213,7 +223,7 @@ def main():
         else:
             from .fetch_repo_metadata import fetch_repo_metadata
 
-            stats = fetch_repo_metadata(db_path=db_path)
+            stats = fetch_repo_metadata(db_path=db_path, retry_errors=args.retry_errors)
             print(f"\nDone: {stats['fetched']} fetched, {stats['errors']} errors")
     elif args.command == "fetch-file-history":
         db_path = args.db or (args.output_dir / "files.db")
@@ -229,7 +239,7 @@ def main():
         else:
             from .fetch_file_history import fetch_file_history
 
-            stats = fetch_file_history(db_path=db_path)
+            stats = fetch_file_history(db_path=db_path, retry_errors=args.retry_errors)
             print(f"\nDone: {stats['fetched']} fetched, {stats['errors']} errors")
     elif args.command == "api":
         import json

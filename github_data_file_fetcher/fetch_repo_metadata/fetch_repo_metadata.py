@@ -34,8 +34,11 @@ def _wait_for_rate_limit(client, e):
         time.sleep(1)
 
 
-def fetch_repo_metadata(db_path: Path | None = None) -> dict:
+def fetch_repo_metadata(db_path: Path | None = None, *, retry_errors: bool = False) -> dict:
     """Fetch metadata for repos that don't have it yet.
+
+    If retry_errors is True, cached error entries (e.g. prior 404s) are
+    ignored so those repos get re-fetched.
 
     Returns dict with counts: fetched, errors.
     """
@@ -56,7 +59,7 @@ def fetch_repo_metadata(db_path: Path | None = None) -> dict:
 
         # Check cache first
         cached = cache.get(_CACHE_ENDPOINT, cache_params)
-        if cached is not None:
+        if cached is not None and not (retry_errors and cached.get("error")):
             if cached.get("error"):
                 stats["errors"] += 1
             else:

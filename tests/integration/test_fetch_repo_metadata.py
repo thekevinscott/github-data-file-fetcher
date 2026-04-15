@@ -169,3 +169,42 @@ def describe_cache_interaction():
         row = conn.execute("SELECT stars FROM repo_metadata WHERE repo_key = ?", (repo_key,)).fetchone()
         conn.close()
         assert row[0] == 999
+
+    def it_skips_cached_errors_by_default(db_path, cache_dir):
+        """Cached error entries are treated as final by default."""
+        repos = _insert_repos(db_path, 1)
+        repo_key = repos[0]
+
+        cache = Cache(cache_dir)
+        cache.set("repo_metadata", {"repo_key": repo_key}, {"error": "not_found"})
+
+        with patch("github_data_file_fetcher.fetch_repo_metadata.fetch_repo_metadata.get_client") as mock:
+            client = MagicMock()
+            client.cache = cache
+            mock.return_value = client
+
+            stats = fetch_repo_metadata(db_path=db_path)
+
+        assert stats["errors"] == 1
+        assert stats["cache_hits"] == 1
+        client.github.get_repo.assert_not_called()
+
+    def it_retries_cached_errors_when_flag_set(db_path, cache_dir):
+        """With retry_errors=True, cached error entries are ignored and re-fetched."""
+        repos = _insert_repos(db_path, 1)
+        repo_key = repos[0]
+
+        cache = Cache(cache_dir)
+        cache.set("repo_metadata", {"repo_key": repo_key}, {"error": "not_found"})
+
+        with patch("github_data_file_fetcher.fetch_repo_metadata.fetch_repo_metadata.get_client") as mock:
+            client = MagicMock()
+            client.cache = cache
+            client.github.get_repo.return_value = _mock_repo_obj(stars=42)
+            mock.return_value = client
+
+            stats = fetch_repo_metadata(db_path=db_path, retry_errors=True)
+
+        assert stats["fetched"] == 1
+        assert stats["errors"] == 0
+        client.github.get_repo.assert_called_once()
