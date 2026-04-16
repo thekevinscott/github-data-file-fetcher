@@ -79,6 +79,23 @@ def describe_rest_fetch():
         assert len(commits) == 1
         assert commits[0]["sha"] == "abc123d"
 
+    def it_passes_ref_to_get_commits(db_path):
+        """get_commits should be scoped to the ref from the URL, not just the default branch."""
+        url = "https://github.com/owner/repo/blob/abc123def/path/file.md"
+        insert_files(db_path, [{"html_url": url, "sha": "abc"}])
+
+        with patch("github_data_file_fetcher.fetch_file_history.fetch_file_history.get_client") as mock:
+            client = MagicMock()
+            client.cache.get.return_value = None
+            repo_mock = MagicMock()
+            repo_mock.get_commits.return_value = [_mock_commit()]
+            client.github.get_repo.return_value = repo_mock
+            mock.return_value = client
+
+            fetch_file_history(db_path=db_path)
+
+        repo_mock.get_commits.assert_called_once_with(path="path/file.md", sha="abc123def")
+
     def it_handles_history_errors(db_path):
         url = "https://github.com/owner/repo/blob/main/file.md"
         insert_files(db_path, [{"html_url": url, "sha": "abc"}])

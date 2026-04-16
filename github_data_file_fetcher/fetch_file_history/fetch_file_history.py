@@ -59,7 +59,7 @@ def fetch_file_history(db_path: Path | None = None, *, retry_errors: bool = Fals
             stats["errors"] += 1
             continue
 
-        owner, repo, _, path = parsed
+        owner, repo, ref, path = parsed
         cache_params = {"owner": owner, "repo": repo, "path": path}
 
         # Check cache first
@@ -82,7 +82,7 @@ def fetch_file_history(db_path: Path | None = None, *, retry_errors: bool = Fals
             try:
                 client._throttle()
                 repo_obj = client.github.get_repo(f"{owner}/{repo}")
-                commits_iter = repo_obj.get_commits(path=path)
+                commits_iter = repo_obj.get_commits(path=path, sha=ref)
 
                 # Get up to 100 commits
                 commit_list = []
