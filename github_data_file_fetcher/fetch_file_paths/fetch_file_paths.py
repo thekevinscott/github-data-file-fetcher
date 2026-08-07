@@ -62,7 +62,11 @@ def fetch_file_paths(
             lo = hi + 1
             chunk = min(chunk * 2, MAX_SIZE)
 
-        elif count >= GITHUB_SEARCH_RESULT_LIMIT:
+        elif count >= GITHUB_SEARCH_RESULT_LIMIT and lo < hi:
+            # Estimate at/over the API's 1000-result ceiling: subdivide.
+            # Only possible while the range spans >1 byte size -- at lo == hi
+            # the size axis is exhausted, so fall through and collect the
+            # first 1000 (same acceptance as the exact-size ceiling below).
             consecutive_empty = 0
             print(f"  size:{lo}..{hi} = {count:,} (narrowing)", flush=True)
             chunk = max(chunk // 2, 1)

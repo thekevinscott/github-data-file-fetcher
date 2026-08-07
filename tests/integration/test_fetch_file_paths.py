@@ -179,6 +179,49 @@ def describe_search_code_caching():
         assert cached["items"] == []
 
 
+def describe_exact_size_over_limit():
+
+    @pytest.mark.parametrize("count", [1000, 1001, 1502])
+    def it_accepts_ceiling_when_single_size_exceeds_limit(db_path, mock_github_client, count):
+        """A single byte size with >= 1000 estimated results cannot be narrowed
+        further (lo == hi). The scan must accept the first 1000 and advance,
+        not loop forever re-querying the same range.
+
+        Regression: size:1231..1231 = 1,502 spun on "(narrowing)" indefinitely.
+        """
+        calls = [0]
+
+        def search_side_effect(query, per_page=100, page=1):
+            calls[0] += 1
+            if calls[0] > 100:
+                raise RuntimeError("infinite narrowing loop: same range re-queried")
+            if "size:" not in query:
+                return {"total_count": count}  # initial total query
+            lo = int(query.split("size:")[1].split("..")[0])
+            # Every range containing size 0 is over the limit, so the scan
+            # narrows down to size:0..0 -- which is still over the limit.
+            if lo == 0:
+                return {"total_count": count}
+            return {"total_count": 0}
+
+        mock_github_client.search_code.side_effect = search_side_effect
+
+        limit_page = [
+            {"html_url": f"https://github.com/test/repo{i}/blob/main/SKILL.md", "sha": f"sha{i}"}
+            for i in range(1000)
+        ]
+        with patch(
+            "github_data_file_fetcher.fetch_file_paths.fetch_file_paths.fetch_files"
+        ) as mock_fetch:
+            mock_fetch.return_value = limit_page
+            fetch_file_paths("filename:SKILL.md", db_path=db_path)
+
+        # The 1000 reachable files were stored and the scan moved past size 0.
+        assert get_file_count(db_path) == 1000
+        queried = [c[0][0] for c in mock_github_client.search_code.call_args_list]
+        assert any("size:1.." in q for q in queried), "scan never advanced past the stuck size"
+
+
 def describe_early_exit():
 
     def it_exits_immediately_when_scan_already_completed(db_path):
