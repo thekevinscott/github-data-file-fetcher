@@ -185,3 +185,5 @@ Marimo requires unique variable names across all cells. Use underscore-prefixed 
 - Never delete files outside of `tmp/` or test directories without explicit user permission.
 - "Clear and retry" is not a safe debugging strategy for shared resources.
 - Ask before deleting: "Can I clear X?" - even if it seems like the obvious fix.
+
+@docs/internals/session-handoff.md
