@@ -186,4 +186,4 @@ Marimo requires unique variable names across all cells. Use underscore-prefixed 
 - "Clear and retry" is not a safe debugging strategy for shared resources.
 - Ask before deleting: "Can I clear X?" - even if it seems like the obvious fix.
 
-@docs/internals/session-handoff.md
+@internal/session-handoff.md
